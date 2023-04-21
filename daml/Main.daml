@@ -1,0 +1,61 @@
+module Main where
+
+type RPCId = ContractId RPC
+type RPCConID = ContractId RPC_Con
+
+
+template RPC
+  with app1: Party
+       app2: Party
+       viewer: Party
+       rpc: Optional Text
+       reason: Optional Text
+       rpcid: Int
+  where
+    signatory app1, app2
+
+    ensure rpc /= Some "" && reason /= Some ""
+
+    choice PushRPC: RPCId
+      controller app1
+      do 
+      create this with
+        rpcid = rpcid + 1
+
+    choice UpdateRPC: RPCId
+      with newRPC : Optional Text
+           newReason: Optional Text
+      observer app2
+      controller app1
+      do 
+        create this with
+          rpc = newRPC
+          reason = newReason
+          rpcid = rpcid + 1
+    
+    choice RejectRPC: RPCId
+      with newReason: Text
+      observer app1,viewer
+      controller app2
+      do 
+        create this with
+          reason = Some newReason
+          rpcid = rpcid + 1
+    
+    choice Accept: RPCConID
+      with id: Int
+      observer app1
+      controller app2
+      do
+        create RPC_Con with
+          app1inRPC = app1
+          app2inRPC = app2
+          id
+
+template RPC_Con
+  with
+    app1inRPC: Party
+    app2inRPC: Party
+    id: Int
+  where
+    signatory app1inRPC, app2inRPC

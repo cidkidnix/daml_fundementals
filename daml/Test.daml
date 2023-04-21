@@ -1,0 +1,77 @@
+module Test where
+import Daml.Script
+import Main
+
+data TestApps = TestApps with
+  app1: Party
+  app2: Party
+  app3: Party
+    deriving (Show, Eq)
+
+setupApps: Script TestApps
+setupApps = do
+    app1 <- allocatePartyWithHint "app1" (PartyIdHint "App1")
+    app2 <- allocatePartyWithHint "app2" (PartyIdHint "App2")
+    app3 <- allocatePartyWithHint "app3" (PartyIdHint "App3")
+    app1id <- validateUserId "app1"
+    app2id <- validateUserId "app2"
+    app3id <- validateUserId "app3"
+    createUser (User app1id (Some app1)) [CanActAs app1]
+    createUser (User app2id (Some app2)) [CanActAs app2]
+    createUser (User app3id (Some app3)) [CanActAs app3]
+    return $ TestApps with
+      app1
+      app2
+      app3
+
+test: Script RPCId
+test = script do
+    testApps@TestApps{app1, app2, app3} <- setupApps
+    appRpc <- submitMulti [app1, app2][] do
+      createCmd RPC with
+        app1
+        app2
+        viewer = app3
+        rpc = None
+        reason = None
+        rpcid = 0
+    
+    getID <- queryContractId app1 appRpc
+
+    exercise_app <- submit app1 $ do
+        exerciseCmd appRpc PushRPC
+
+    getID2 <- queryContractId app1 exercise_app
+
+    exercise_thing <- submit app2 $ do
+        exerciseCmd exercise_app RejectRPC with
+            newReason = "text1"
+
+    updateRPC <- submit app1 $ do
+        exerciseCmd exercise_thing UpdateRPC with
+            newRPC = Some "text11"
+            newReason = Some "text2"
+    
+    ensure_test <- submitMultiMustFail [app1, app2][] do
+        createCmd RPC with
+          app1
+          app2
+          viewer = app3
+          rpc = Some ""
+          reason = Some ""
+          rpcid = 10
+
+    failCase <- submitMustFail app1 $ do
+        exerciseCmd updateRPC RejectRPC with
+            newReason = "null"
+
+    failCase3 <- submitMustFail app3 $ do
+        exerciseCmd updateRPC RejectRPC with
+            newReason = "failure"
+
+    view3 <- queryContractId app3 updateRPC
+
+    submit app1 $ do
+        exerciseCmd updateRPC UpdateRPC with
+            newRPC = Some "text11"
+            newReason = Some "text2"

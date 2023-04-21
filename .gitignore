@@ -1,0 +1,6 @@
+/.daml
+/log
+navigator.log
+*.nix
+*.envrc
+*.direnv
